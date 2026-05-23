@@ -1,0 +1,901 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>BodyFix — Payroll Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+:root{
+  --bg:#0E1117;--sf:#161B25;--sf2:#1E2535;--bd:#2A3347;
+  --acc:#3B82F6;--grn:#10B981;--amb:#F59E0B;--red:#EF4444;--pur:#8B5CF6;
+  --tx:#E8EDF5;--tx2:#8899AA;--tx3:#4A5568;
+  --font:'IBM Plex Sans Arabic',sans-serif;--mono:'IBM Plex Mono',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--tx);direction:rtl}
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:var(--sf)}
+::-webkit-scrollbar-thumb{background:var(--bd);border-radius:4px}
+.shell{display:grid;grid-template-rows:52px 1fr;height:100vh;overflow:hidden}
+.topbar{background:var(--sf);border-bottom:1px solid var(--bd);display:flex;align-items:center;padding:0 20px;gap:14px}
+.logo{font-size:13px;font-weight:700;letter-spacing:.1em;color:var(--acc);text-transform:uppercase;font-family:var(--mono)}
+.logo span{color:var(--tx3)}
+.topbar-mid{font-size:11px;color:var(--tx3);font-family:var(--mono)}
+.topbar-right{margin-right:auto;display:flex;gap:8px;align-items:center}
+.tbtn{background:transparent;border:1px solid var(--bd);border-radius:7px;color:var(--tx2);font-family:var(--font);font-size:12px;padding:5px 13px;cursor:pointer;transition:.15s}
+.tbtn:hover{border-color:var(--acc);color:var(--acc)}
+.main{display:grid;grid-template-columns:268px 1fr;overflow:hidden}
+.sidebar{background:var(--sf);border-left:1px solid var(--bd);overflow-y:auto;display:flex;flex-direction:column}
+.sb-sec{padding:14px 16px;border-bottom:1px solid var(--bd)}
+.sb-lbl{font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--tx3);font-family:var(--mono);margin-bottom:10px}
+
+/* ── Upload zone — the key piece ── */
+.uz{position:relative;border-radius:10px;padding:11px 12px;margin-bottom:8px;cursor:pointer;transition:border-color .2s,background .2s;text-align:center}
+/* Default: waiting */
+.uz.wait{border:1px dashed var(--bd);background:transparent}
+.uz.wait:hover{border-color:var(--acc);background:rgba(59,130,246,.04)}
+/* Done: green solid border */
+.uz.done{border:2px solid var(--grn);background:rgba(16,185,129,.10);box-shadow:0 0 0 3px rgba(16,185,129,.2)}
+/* Required badge */
+.uz.req-wait{border:1px dashed rgba(245,158,11,.5);background:rgba(245,158,11,.03)}
+.uz.req-wait:hover{border-color:var(--amb);background:rgba(245,158,11,.06)}
+
+.uz input[type=file]{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:0}
+.uz-row{display:flex;align-items:center;gap:10px}
+.uz-icon{font-size:20px;flex-shrink:0;transition:transform .2s}
+.uz.done .uz-icon{transform:scale(1.15)}
+.uz-text{flex:1;text-align:right}
+.uz-name{font-size:12px;font-weight:600;color:var(--tx2);transition:color .2s}
+.uz.done .uz-name{color:var(--grn)!important}
+.uz-file{font-size:10px;color:var(--tx3);font-family:var(--mono);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px}
+.uz-badge{font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;letter-spacing:.05em}
+.uz-badge.req{background:rgba(245,158,11,.15);color:var(--amb)}
+.uz-badge.opt{background:rgba(74,85,104,.2);color:var(--tx3)}
+.uz-badge.ok{background:rgba(16,185,129,.15);color:var(--grn)}
+/* status indicator dot */
+.uz-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;transition:background .2s}
+.uz.wait .uz-dot,.uz.req-wait .uz-dot{background:var(--bd)}
+.uz.done .uz-dot{background:var(--grn);box-shadow:0 0 6px rgba(16,185,129,.5)}
+
+.run-btn{width:100%;padding:10px;border-radius:9px;border:none;background:var(--acc);color:#fff;font-family:var(--font);font-weight:600;font-size:13px;cursor:pointer;transition:.18s;display:flex;align-items:center;justify-content:center;gap:7px;margin-top:4px}
+.run-btn:hover:not(:disabled){background:#2563EB;transform:translateY(-1px)}
+.run-btn:disabled{background:var(--bd);color:var(--tx3);cursor:not-allowed;transform:none}
+.err{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);border-radius:7px;padding:9px 11px;font-size:11px;color:#FCA5A5;line-height:1.6;margin-top:8px}
+.nav{display:flex;flex-direction:column}
+.ni{display:flex;align-items:center;gap:9px;padding:9px 16px;cursor:pointer;transition:.12s;font-size:13px;color:var(--tx2);border-right:2px solid transparent}
+.ni:hover{background:rgba(255,255,255,.02);color:var(--tx)}
+.ni.on{background:rgba(59,130,246,.08);color:var(--acc);border-right-color:var(--acc)}
+.ni-ic{font-size:14px;width:18px;text-align:center}
+.sc{display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:var(--sf2);border-radius:7px;margin-bottom:5px}
+.sc-l{font-size:11px;color:var(--tx2)}.sc-v{font-size:12px;font-weight:600;font-family:var(--mono);color:var(--tx)}
+.content{overflow-y:auto;padding:24px}
+.pg{display:none}.pg.on{display:block}
+.kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px}
+.kpi{background:var(--sf);border:1px solid var(--bd);border-radius:13px;padding:18px 20px;position:relative;overflow:hidden}
+.kpi::before{content:'';position:absolute;top:0;right:0;left:0;height:2px;background:var(--c,var(--acc))}
+.kv{font-size:22px;font-weight:700;font-family:var(--mono);color:var(--tx);margin-bottom:3px}
+.kl{font-size:12px;color:var(--tx2)}.ks{font-size:10px;color:var(--tx3);margin-top:2px;font-family:var(--mono)}
+.tcard{background:var(--sf);border:1px solid var(--bd);border-radius:13px;overflow:hidden;margin-bottom:20px}
+.thead-row{display:flex;align-items:center;padding:13px 18px;border-bottom:1px solid var(--bd);gap:10px;flex-wrap:wrap}
+.thead-title{font-size:14px;font-weight:600}
+select{background:var(--sf);border:1px solid var(--bd);border-radius:7px;color:var(--tx2);font-family:var(--font);font-size:12px;padding:5px 10px;cursor:pointer;outline:none}
+select:focus{border-color:var(--acc)}
+.tw{overflow-x:auto}
+table{width:100%;border-collapse:collapse}
+th{padding:10px 13px;text-align:right;font-size:10px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--tx3);font-family:var(--mono);background:var(--sf);white-space:nowrap;border-bottom:1px solid var(--bd)}
+td{padding:9px 13px;font-size:12px;color:var(--tx);border-bottom:1px solid rgba(42,51,71,.45);white-space:nowrap}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
+tbody tr.sel td{background:rgba(59,130,246,.07)!important}
+.td-name{font-weight:500}
+.td-m{font-family:var(--mono);font-size:12px}
+.td-pos{color:var(--grn)!important}.td-neg{color:var(--red)!important}.td-acc{color:var(--acc)!important;font-weight:600}
+.pill{display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:18px;font-size:11px;font-weight:500}
+.att-ok{color:var(--grn)}.att-warn{color:var(--red)}.att-mid{color:var(--amb)}
+.tfoot{display:flex;justify-content:space-between;align-items:center;padding:11px 16px;border-top:1px solid var(--bd);flex-wrap:wrap;gap:8px}
+.tfoot-tot{font-size:12px;font-family:var(--mono);color:var(--tx2)}
+.tfoot-tot span{color:var(--acc);font-weight:600}
+td.ed{cursor:text}
+td.ed:hover{background:rgba(245,158,11,.04)!important}
+td.ed input{width:80px;background:var(--sf2);border:1px solid var(--acc);border-radius:4px;color:var(--tx);font-family:var(--mono);font-size:12px;padding:2px 6px;outline:none}
+.cg{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px}
+.cc{background:var(--sf);border:1px solid var(--bd);border-radius:13px;padding:20px}
+.ct{font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--tx3);font-family:var(--mono);margin-bottom:14px}
+.jg{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:24px}
+.jcard{background:var(--sf);border:1px solid var(--bd);border-radius:13px;padding:18px;cursor:pointer;transition:.18s;border-right:3px solid var(--c,var(--acc))}
+.jcard:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,.25)}
+.jc-h{display:flex;align-items:center;gap:9px;margin-bottom:10px}
+.jc-dot{width:7px;height:7px;border-radius:50%;background:var(--c)}
+.jc-name{font-size:13px;font-weight:600;color:var(--c)}.jc-cnt{font-size:11px;color:var(--tx3);margin-right:auto}
+.jc-tot{font-size:19px;font-weight:700;font-family:var(--mono);color:var(--tx);margin-bottom:2px}.jc-avg{font-size:11px;color:var(--tx3)}
+.pb{margin-top:9px;background:var(--sf2);border-radius:3px;height:4px}.pbf{height:100%;border-radius:3px;background:var(--c);transition:width .5s}
+.mo{position:fixed;inset:0;background:rgba(0,0,0,.75);backdrop-filter:blur(6px);z-index:600;display:none;align-items:center;justify-content:center}
+.mo.show{display:flex}
+.mb{background:var(--sf);border:1px solid var(--bd);border-radius:18px;width:540px;max-width:96vw;max-height:90vh;overflow-y:auto;direction:rtl}
+.mt{display:flex;align-items:center;gap:12px;padding:20px 22px 14px;border-bottom:1px solid var(--bd);position:sticky;top:0;background:var(--sf);z-index:1}
+.mt-dot{width:9px;height:9px;border-radius:50%;background:var(--c,var(--acc));flex-shrink:0}
+.mt-name{font-size:17px;font-weight:600}.mt-sub{font-size:12px;color:var(--tx3);margin-top:1px}
+.mc{margin-right:auto;background:none;border:none;color:var(--tx3);cursor:pointer;font-size:20px;padding:3px 7px;border-radius:5px}
+.mc:hover{color:var(--tx);background:var(--sf2)}
+.mbody{padding:18px 22px}
+.msec{margin-bottom:16px}
+.msec-t{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--tx3);font-family:var(--mono);padding:5px 0 7px;border-bottom:1px solid var(--bd);margin-bottom:8px}
+.mr{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid rgba(42,51,71,.4)}
+.mr:last-child{border-bottom:none}
+.mrl{font-size:12px;color:var(--tx2)}.mrv{font-size:12px;font-family:var(--mono);color:var(--tx);font-weight:500}
+.mrv.big{font-size:15px;font-weight:700;color:var(--acc)}.mrv.pos{color:var(--grn)}.mrv.neg{color:var(--red)}
+.mgrand{background:var(--sf2);border:1px solid var(--bd);border-radius:11px;padding:14px 18px;display:flex;justify-content:space-between;align-items:center;margin-top:14px}
+.mgl{font-size:13px;font-weight:600;color:var(--tx2)}.mgv{font-size:22px;font-weight:700;font-family:var(--mono);color:var(--acc)}
+@keyframes spin{to{transform:rotate(360deg)}}
+.spin{display:inline-block;width:13px;height:13px;border:2px solid rgba(255,255,255,.2);border-top-color:#fff;border-radius:50%;animation:spin .6s linear infinite}
+.del-btn{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.2);color:#FCA5A5;border-radius:5px;padding:2px 7px;cursor:pointer;font-size:11px}
+.del-btn:hover{background:rgba(239,68,68,.25)}
+/* Upload animation */
+@keyframes pulse-green{0%,100%{box-shadow:0 0 0 0 rgba(16,185,129,.4)}50%{box-shadow:0 0 0 6px rgba(16,185,129,0)}}
+.uz.done{animation:pulse-green .6s ease-out}
+</style>
+</head>
+<body>
+<div class="shell">
+<div class="topbar">
+  <div class="logo">BodyFix <span>/ Payroll</span></div>
+  <div class="topbar-mid" id="periodLbl">— ارفع الملفات للبدء</div>
+  <div class="topbar-right">
+    <button class="tbtn" onclick="openAddModal()">+ موظف</button>
+    <button class="tbtn" onclick="exportExcel()">⬇ Excel</button>
+    <button class="tbtn" onclick="exportCSV()">⬇ CSV</button>
+  </div>
+</div>
+<div class="main">
+<div class="sidebar">
+  <div class="sb-sec">
+    <div class="sb-lbl">رفع الملفات</div>
+
+    <!-- File 1: Employees (required) -->
+    <div class="uz req-wait" id="uz-emp">
+      <input type="file" accept=".xlsx,.xls" multiple onchange="onFileMulti(this,'emp')">
+      <div class="uz-row">
+        <div class="uz-dot"></div>
+        <div class="uz-icon" id="icon-emp">👥</div>
+        <div class="uz-text">
+          <div class="uz-name" id="name-emp">ملف الموظفين</div>
+          <div class="uz-file" id="file-emp">Data_Entry sheet</div>
+        </div>
+        <span class="uz-badge req" id="badge-emp">مطلوب</span>
+      </div>
+    </div>
+
+    <!-- File 2: Attendance (required) -->
+    <div class="uz req-wait" id="uz-att">
+      <input type="file" accept=".xlsx,.xls" multiple onchange="onFileMulti(this,'att')">
+      <div class="uz-row">
+        <div class="uz-dot"></div>
+        <div class="uz-icon" id="icon-att">⏱</div>
+        <div class="uz-text">
+          <div class="uz-name" id="name-att">ملف البصمة الخام</div>
+          <div class="uz-file" id="file-att">User, Created, Last Updated, Branch</div>
+        </div>
+        <span class="uz-badge req" id="badge-att">مطلوب</span>
+      </div>
+    </div>
+
+    <!-- File 3: Appointments (optional) -->
+    <div class="uz wait" id="uz-apt">
+      <input type="file" accept=".xlsx,.xls" multiple onchange="onFileMulti(this,'apt')">
+      <div class="uz-row">
+        <div class="uz-dot"></div>
+        <div class="uz-icon" id="icon-apt">📅</div>
+        <div class="uz-text">
+          <div class="uz-name" id="name-apt">ملف المواعيد</div>
+          <div class="uz-file" id="file-apt">Doctor, Type, Branch — جلسات Sec02</div>
+        </div>
+        <span class="uz-badge opt" id="badge-apt">اختياري</span>
+      </div>
+    </div>
+
+    <!-- File 4: Operations Steps (optional) -->
+    <div class="uz wait" id="uz-ops">
+      <input type="file" accept=".xlsx,.xls" multiple onchange="onFileMulti(this,'ops')">
+      <div class="uz-row">
+        <div class="uz-dot"></div>
+        <div class="uz-icon" id="icon-ops">📋</div>
+        <div class="uz-text">
+          <div class="uz-name" id="name-ops">Operations Steps</div>
+          <div class="uz-file" id="file-ops">الجلسات المطلوب استكمال ملفاتها</div>
+        </div>
+        <span class="uz-badge opt" id="badge-ops">اختياري</span>
+      </div>
+    </div>
+
+    <!-- File 5: Encounters (optional) -->
+    <div class="uz wait" id="uz-enc">
+      <input type="file" accept=".xlsx,.xls" multiple onchange="onFileMulti(this,'enc')">
+      <div class="uz-row">
+        <div class="uz-dot"></div>
+        <div class="uz-icon" id="icon-enc">✅</div>
+        <div class="uz-text">
+          <div class="uz-name" id="name-enc">Encounters (المنجز)</div>
+          <div class="uz-file" id="file-enc">الملفات المنجزة فعلاً</div>
+        </div>
+        <span class="uz-badge opt" id="badge-enc">اختياري</span>
+      </div>
+    </div>
+
+    <!-- File 6: Doc errors (optional) -->
+    <div class="uz wait" id="uz-doc">
+      <input type="file" accept=".xlsx,.xls" multiple onchange="onFileMulti(this,'doc')">
+      <div class="uz-row">
+        <div class="uz-dot"></div>
+        <div class="uz-icon" id="icon-doc">❌</div>
+        <div class="uz-text">
+          <div class="uz-name" id="name-doc">أخطاء الكومبليت</div>
+          <div class="uz-file" id="file-doc">اسم الدكتور، المريض، الملحوظة</div>
+        </div>
+        <span class="uz-badge opt" id="badge-doc">اختياري</span>
+      </div>
+    </div>
+
+    <button class="run-btn" id="runBtn" onclick="runProcess()" disabled>تحليل البيانات</button>
+    <div id="errBox" class="err" style="display:none"></div>
+  </div>
+
+  <div class="sb-sec" style="padding:12px 0;border-bottom:1px solid var(--bd)">
+    <div class="nav">
+      <div class="ni on" onclick="goto('overview',this)"><span class="ni-ic">◈</span> نظرة عامة</div>
+      <div class="ni" onclick="goto('employees',this)"><span class="ni-ic">◉</span> الموظفون</div>
+      <div class="ni" onclick="goto('charts',this)"><span class="ni-ic">◫</span> رسوم بيانية</div>
+      <div class="ni" onclick="goto('attendance',this)"><span class="ni-ic">◷</span> الحضور</div>
+    </div>
+  </div>
+
+  <div class="sb-sec" id="sbStats" style="display:none">
+    <div class="sb-lbl">ملخص</div>
+    <div id="statChips"></div>
+  </div>
+
+  <div class="sb-sec" style="margin-top:auto">
+    <div class="sb-lbl">تصدير</div>
+    <button class="tbtn" style="width:100%;margin-bottom:6px;display:block;text-align:center" onclick="exportExcel()">📊 Excel كامل</button>
+    <button class="tbtn" style="width:100%;display:block;text-align:center" onclick="exportFiltered()">🔍 Excel (فلتر)</button>
+  </div>
+</div>
+
+<div class="content">
+  <div id="emptyMsg" style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:60vh;gap:16px;color:var(--tx3)">
+    <div style="font-size:52px;opacity:.15">📂</div>
+    <div style="font-size:14px">ارفع ملف الموظفين + البصمة ثم اضغط تحليل</div>
+    <div style="font-size:11px;color:var(--tx3);font-family:var(--mono)">الملفات المطلوبة: الموظفين + البصمة الخام</div>
+  </div>
+  <div class="pg" id="pg-overview">
+    <div class="kpi-row" id="kpiRow"></div>
+    <div class="jg" id="jobCards"></div>
+    <div class="cg" id="ovCharts"></div>
+  </div>
+  <div class="pg" id="pg-employees">
+    <div class="tcard">
+      <div class="thead-row">
+        <span class="thead-title">الموظفون</span>
+        <div style="margin-right:auto;display:flex;gap:8px">
+          <select id="jf" onchange="renderEmp()"><option value="all">كل الأقسام</option></select>
+          <select id="bf" onchange="renderEmp()"><option value="all">كل الفروع</option></select>
+        </div>
+        <button class="tbtn" onclick="openAddModal()" style="font-size:12px">+ موظف</button>
+      </div>
+      <div class="tw">
+        <table>
+          <thead><tr><th>#</th><th>الاسم</th><th>الوظيفة</th><th>أساسي</th><th>حضور</th><th>تأخير</th><th>Sec01</th><th>Sec02 ✏</th><th>Sec03 ✏</th><th>Sec04</th><th>الإجمالي</th><th></th></tr></thead>
+          <tbody id="empTb"></tbody>
+        </table>
+      </div>
+      <div class="tfoot"><div class="tfoot-tot" id="empFoot">—</div></div>
+    </div>
+  </div>
+  <div class="pg" id="pg-charts">
+    <div class="cg">
+      <div class="cc"><div class="ct">إجمالي / القسم</div><canvas id="cBar" height="200"></canvas></div>
+      <div class="cc"><div class="ct">توزيع الرواتب</div><canvas id="cPie" height="200"></canvas></div>
+      <div class="cc"><div class="ct">متوسط / القسم</div><canvas id="cAvg" height="200"></canvas></div>
+      <div class="cc"><div class="ct">أعلى 15 تأخيراً (دقيقة)</div><canvas id="cDel" height="200"></canvas></div>
+    </div>
+  </div>
+  <div class="pg" id="pg-attendance">
+    <div class="tcard">
+      <div class="thead-row"><span class="thead-title">الحضور والتأخير</span></div>
+      <div class="tw">
+        <table>
+          <thead><tr><th>الاسم</th><th>الوظيفة</th><th>حضر</th><th>مطلوب</th><th>تأخير (د)</th><th>مرات >10د</th><th>OT (د)</th><th>غياب</th><th>الحالة</th></tr></thead>
+          <tbody id="attTb"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+</div>
+<div class="mo" id="detMo" onclick="closeMo('detMo',event)"><div class="mb" id="detBox"></div></div>
+<div class="mo" id="addMo" onclick="closeMo('addMo',event)">
+  <div class="mb" style="width:580px">
+    <div class="mt"><div class="mt-dot"></div><div class="mt-name" id="addMoTitle">إضافة موظف</div><button class="mc" onclick="closeMo('addMo')">✕</button></div>
+    <div class="mbody"><div id="addForm" style="display:grid;gap:10px"></div>
+      <div style="display:flex;gap:10px;margin-top:16px">
+        <button class="run-btn" style="flex:1" onclick="saveEmployee()">💾 حفظ</button>
+        <button class="tbtn" onclick="closeMo('addMo')">إلغاء</button>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+const JC={'Physical therapist':{c:'#3B82F6',l:'علاج طبيعي',ic:'🏥'},'Assistant':{c:'#10B981',l:'مساعد',ic:'💆'},'Secretary':{c:'#F59E0B',l:'سكرتارية',ic:'📋'},'Housekeeping':{c:'#8B5CF6',l:'خدمات',ic:'🧹'},'Nutrition doctor':{c:'#34D399',l:'تغذية',ic:'🥗'}};
+const JO=Object.keys(JC);
+const OT_MULT={'Physical therapist':1,'Nutrition doctor':1,'Assistant':1.5,'Secretary':1.5,'Housekeeping':1.5};
+const HARAM=[{k:'H1',l:'كشف التغذية',b:200},{k:'H2',l:'متابعة التغذية',b:300},{k:'H3',l:'جلسات تخسيس',b:300},{k:'H4',l:'كشف ع.ط',b:200},{k:'H5',l:'جلسات ع.ط',b:200}];
+const DOKKI=[{k:'D1',l:'كشف علاج طبيعي',b:300},{k:'D2',l:'جلسات علاج طبيعي',b:300},{k:'D3',l:'حجامة وريكفري',b:300},{k:'D4',l:'تيكار',b:300}];
+const FILES={};
+let DATA=[],attMap={},aptSessions={},branchSessions={},fileComp={},docErrs={};
+let _rawRows=[],charts={},selEmp=null,editIdx=null;
+const n=v=>{const p=parseFloat(v);return isNaN(p)?0:p};
+const fmt=v=>isNaN(v)||v==null?'—':Number(v).toLocaleString('ar-EG',{maximumFractionDigits:0})+' ج.م';
+const f1=v=>isNaN(v)?'—':Number(v).toFixed(1);
+
+// ── File upload ──────────────────────────────────────────────────
+function onFile(input,key){ onFileMulti(input,key); }
+function onFileMulti(input,key){
+  if(!input.files||!input.files.length) return;
+  // Store as array if multiple, single if one
+  FILES[key] = input.files.length===1 ? input.files[0] : Array.from(input.files);
+  const names = Array.from(input.files).map(f=>f.name).join(', ');
+  markDone(key, input.files.length===1 ? names : `${input.files.length} ملفات: ${names}`);
+}
+
+function markDone(key,filename){
+  const uz=document.getElementById('uz-'+key);
+  const icon=document.getElementById('icon-'+key);
+  const nameEl=document.getElementById('name-'+key);
+  const fileEl=document.getElementById('file-'+key);
+  const badge=document.getElementById('badge-'+key);
+  // Switch classes
+  uz.className='uz done';
+  // Update content
+  icon.textContent='✅';
+  fileEl.textContent=filename;
+  badge.className='uz-badge ok';
+  badge.textContent='✓ تم';
+  checkReady();
+}
+
+function checkReady(){
+  document.getElementById('runBtn').disabled=!(FILES.emp&&FILES.att);
+}
+
+// ── Excel reading ────────────────────────────────────────────────
+async function readXLOne(file,sheet){
+  const buf=await file.arrayBuffer();
+  const wb=XLSX.read(buf,{type:'array',cellDates:true,raw:false});
+  const sn=sheet&&wb.SheetNames.includes(sheet)?sheet:wb.SheetNames[0];
+  const ws=wb.Sheets[sn];
+  const raw=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+  let hi=0;
+  for(let i=0;i<Math.min(raw.length,8);i++){
+    if(raw[i].some(c=>String(c).includes('الاسم')||String(c).includes('Name'))){hi=i;break;}
+  }
+  const hdrs=raw[hi].map(c=>String(c).trim());
+  const rows=[];
+  for(let i=hi+1;i<raw.length;i++){
+    if(!raw[i].some(c=>String(c).trim()))continue;
+    const row={};hdrs.forEach((h,ci)=>{if(h)row[h]=raw[i][ci]??'';});rows.push(row);
+  }
+  return rows;
+}
+
+// ── Attendance processing ────────────────────────────────────────
+async function readXL(fileOrArr,sheet){
+  if(Array.isArray(fileOrArr)){
+    // Multiple files: merge all rows
+    const allRows=[];
+    for(const f of fileOrArr){
+      const rows=await readXLOne(f,sheet);
+      allRows.push(...rows);
+    }
+    return allRows;
+  }
+  return readXLOne(fileOrArr,sheet);
+}
+
+
+async function buildAttMap(fileOrArr,empNames){
+  attMap={};
+  // Support multiple attendance files
+  const files=Array.isArray(fileOrArr)?fileOrArr:[fileOrArr];
+  let rows=[];
+  for(const file of files){
+    const buf=await file.arrayBuffer();
+    const wb=XLSX.read(buf,{type:'array',cellDates:true});
+    const ws=wb.Sheets[wb.SheetNames[0]];
+    rows=rows.concat(XLSX.utils.sheet_to_json(ws,{defval:''}));
+  }
+  // Detect format: raw (User,Created) or processed (الاسم,التاريخ,حضور)
+  const isRaw=rows.length>0&&('User' in rows[0]||'Created' in rows[0]);
+  for(const r of rows){
+    let nm,ci,co,branch;
+    if(isRaw){
+      nm=String(r['User']||'').trim();
+      ci=r['Created'] instanceof Date?r['Created']:new Date(r['Created']);
+      co=r['Last Updated'] instanceof Date?r['Last Updated']:new Date(r['Last Updated']);
+      branch=String(r['Branch']||'');
+    } else {
+      nm=String(r['الاسم']||'').trim();
+      ci=r['حضور'] instanceof Date?r['حضور']:new Date(r['حضور']||'');
+      co=r['انصراف'] instanceof Date?r['انصراف']:new Date(r['انصراف']||'');
+      branch=String(r['الفرع']||'');
+    }
+    if(!nm||nm==='إجمالي') continue;
+    // Simple name match
+    const matched=matchName(nm,empNames);
+    if(!attMap[matched])attMap[matched]={days:0,delayMin:0,lateCount:0,otMin:0,absentDays:0};
+    attMap[matched].days++;
+    const durH=(co-ci)/3600000;
+    const isInvalid=isNaN(durH)||durH<0.25||durH>14;
+    if(!isInvalid&&!isNaN(ci.getTime())){
+      // delay
+      const schedMin=14*60; // default 14:00
+      const ciMin=ci.getHours()*60+ci.getMinutes();
+      const delay=Math.max(0,ciMin-schedMin);
+      attMap[matched].delayMin+=delay;
+      if(delay>10)attMap[matched].lateCount++;
+      // OT
+      if(!isNaN(co.getTime())){
+        const reqH=7;
+        const endSched=schedMin+reqH*60;
+        const coMin=co.getHours()*60+co.getMinutes();
+        const ot=Math.max(0,coMin-endSched);
+        if(ot<600)attMap[matched].otMin+=ot;
+      }
+    }
+  }
+}
+
+function matchName(raw,refs){
+  const c=raw.toLowerCase().replace(/^(dr\.|د\.|دكتور|دكتورة)\s*/i,'').trim();
+  const norms=[[['mohamad','mohammad','mohamed','muhammad'],'mohamed'],
+              [['hussein','husain','hussain'],'hussein'],
+              [['yasmin','jasmin','yasmine'],'yasmin'],
+              [['sara','sarah'],'sara'],
+              [['ahmad','ahmed'],'ahmed']];
+  let cn=c;
+  for(const[vs,rep]of norms)for(const v of vs)cn=cn.replace(v,rep);
+  for(const r of refs){
+    let rn=r.toLowerCase();
+    for(const[vs,rep]of norms)for(const v of vs)rn=rn.replace(v,rep);
+    if(cn===rn)return r;
+  }
+  for(const r of refs){
+    const rl=r.toLowerCase();
+    if(cn.includes(rl.split(' ')[0])||rl.includes(cn.split(' ')[0]))return r;
+  }
+  return raw.replace(/^(Dr\.|د\.|دكتور|دكتورة)\s*/i,'').trim();
+}
+
+// ── Appointment sessions ─────────────────────────────────────────
+async function buildAptSessions(file,empNames){
+  aptSessions={}; branchSessions={};
+  const buf=await file.arrayBuffer();
+  const wb=XLSX.read(buf,{type:'array',cellDates:false});
+  const sn=wb.SheetNames.includes('data')?'data':wb.SheetNames[0];
+  const ws=wb.Sheets[sn];
+  const rows=XLSX.utils.sheet_to_json(ws,{defval:''});
+  if(!rows.length)return;
+  const docCol=Object.keys(rows[0]).find(k=>k.toLowerCase().includes('doctor')||k.includes('الدكتور'))||Object.keys(rows[0])[1];
+  const typeCol=Object.keys(rows[0]).find(k=>k.toLowerCase().includes('type')||k.includes('النوع')||k.includes('الخدمة'))||Object.keys(rows[0])[2];
+  const branchCol=Object.keys(rows[0]).find(k=>k.toLowerCase().includes('branch')||k.includes('الفرع')||k.includes('location'));
+  const PT_MAP={'جلسة علاج طبيعي':'physio','ج ع ط 2':'physio','ج ع ط 5':'physio','ج ع ط 8':'physio','ج ع ط 11':'physio','اعادة تقييم':'reass','كشف علاج طبيعي':'assess','ج ريكفري':'recovery','ج حجامه':'hejama','تيكار':'tecar','جلسه منزليه':'private_s'};
+  const ASST_MAP={'Cavitation':'cavit','Radiofrequency':'rf','Excilis':'excilis','Cryo-Air':'cryoAir','Cryo Air':'cryoAir','Cryo':'cryo','Cryo-blade':'blade','Cryoblade':'blade','DO':'do_s','Skin Care':'enaya','العناية بالبشرة':'enaya','العناية':'enaya'};
+  const SLIM=new Set(['Cavitation','Radiofrequency','Excilis','Cryo-Air','Cryo Air','Cryo','Cryo-blade','Cryoblade','DO','Skin Care','العناية بالبشرة','العناية']);
+  for(const r of rows){
+    const rawDoc=String(r[docCol]||''); const stype=String(r[typeCol]||'').trim();
+    const branch=branchCol?String(r[branchCol]||'').trim():'';
+    const matched=matchName(rawDoc,empNames);
+    if(!aptSessions[matched])aptSessions[matched]={};
+    if(PT_MAP[stype]){const k=PT_MAP[stype];aptSessions[matched][k]=(aptSessions[matched][k]||0)+1;}
+    if(ASST_MAP[stype]){const k=ASST_MAP[stype];aptSessions[matched][k]=(aptSessions[matched][k]||0)+1;}
+    if(!branchSessions[branch])branchSessions[branch]={};
+    const bs=branchSessions[branch];
+    if(stype==='كشف علاج طبيعي')bs['كشف_ع_ط']=(bs['كشف_ع_ط']||0)+1;
+    if(PT_MAP[stype]==='physio')bs['جلسات_ع_ط']=(bs['جلسات_ع_ط']||0)+1;
+    if(stype==='كشف تغذية')bs['كشف_تغذية']=(bs['كشف_تغذية']||0)+1;
+    if(stype==='متابعة تغذية')bs['متابعة_تغذية']=(bs['متابعة_تغذية']||0)+1;
+    if(SLIM.has(stype))bs['تخسيس']=(bs['تخسيس']||0)+1;
+    if(stype==='ج حجامه')bs['حجامة']=(bs['حجامة']||0)+1;
+    if(stype==='ج ريكفري')bs['ريكفري']=(bs['ريكفري']||0)+1;
+    if(stype==='تيكار')bs['تيكار']=(bs['تيكار']||0)+1;
+  }
+}
+
+// ── File completion ──────────────────────────────────────────────
+const TARGET_OPS=['جلسة علاج طبيعي','ج ع ط 2','ج ع ط 5','ج ع ط 8','ج ع ك 8','ج ع ط 11'];
+async function buildFileComp(opsFile,encFile,empNames){
+  fileComp={};
+  if(opsFile){
+    const rows=await readXL(opsFile);
+    const docCol=Object.keys(rows[0]||{}).find(k=>k.toLowerCase().includes('doctor')||k.includes('الدكتور'))||'';
+    const typeCol=Object.keys(rows[0]||{}).find(k=>k.toLowerCase().includes('type')||k.includes('الخدمة'))||'';
+    for(const r of rows){
+      const svc=String(r[typeCol]||'').trim();
+      const doc=String(r[docCol]||'').trim();
+      if(TARGET_OPS.some(t=>svc.includes(t)||t.includes(svc))){
+        const m=matchName(doc,empNames);
+        if(!fileComp[m])fileComp[m]={req:0,done:0};
+        fileComp[m].req++;
+      }
+    }
+  }
+  if(encFile){
+    const rows=await readXL(encFile);
+    const docCol=Object.keys(rows[0]||{}).find(k=>k.toLowerCase().includes('doctor')||k.includes('الدكتور'))||'';
+    for(const r of rows){
+      const doc=String(r[docCol]||'').trim();
+      if(doc){const m=matchName(doc,empNames);if(!fileComp[m])fileComp[m]={req:0,done:0};fileComp[m].done++;}
+    }
+  }
+}
+
+// ── Payroll computation ──────────────────────────────────────────
+function calcPayroll(e){
+  const basic=n(e.basic),annual=n(e.annual),nb=basic+annual;
+  const shifts=n(e.shifts)||22,shHrs=n(e.shiftHrs)||7;
+  const extraHrs=n(e.extraHrs)||0;
+  const loan=n(e.loan),bonD=n(e.bonDays),penD=n(e.penDays),utD=n(e.utDays);
+  const shiftCost=shifts>0?nb/shifts:0,hourCost=shHrs>0?shiftCost/shHrs:0;
+  const otMonthly=hourCost*extraHrs*shifts;
+  const sec01=nb+otMonthly;
+  const att=attMap[e.name]||{days:0,delayMin:0,lateCount:0,otMin:0,absentDays:0};
+  const attDays=att.days,lateCount=att.lateCount,otMin=att.otMin,delayMin=att.delayMin;
+  const mult=OT_MULT[e.job]||1;
+  const otDays=shHrs>0?Math.round((otMin/60/shHrs)*mult*100)/100:0;
+  const commit=attDays>=shifts&&lateCount<=2;
+  const sec04=n(e.otDaysManual??otDays)*shiftCost+bonD*shiftCost-utD*shiftCost-penD*shiftCost-loan;
+  const sess=aptSessions[e.name]||{};
+  let sec02=0,sec03=0;
+  if(e.job==='Physical therapist'){
+    const ph=n(e.physio??sess.physio??0),phB=ph<=40?0:ph<=70?(ph-40)*20:600+(ph-70)*30;
+    sec02=phB+n(e.recovery??sess.recovery??0)*50+n(e.hejama??sess.hejama??0)*40+n(e.tecar??sess.tecar??0)*50+n(e.shock1??0)*20+n(e.shock2??0)*30+n(e.private_s??sess.private_s??0)*400+n(e.reass??sess.reass??0)*20+n(e.assess??sess.assess??0)*30;
+    sec03=(commit?200:0)+(String(e.workshop||'N').toUpperCase()==='Y'?200:0);
+  }else if(e.job==='Assistant'){
+    const s=aptSessions[e.name]||{};
+    sec02=(n(e.cavit??s.cavit??0))*10+(n(e.rf??s.rf??0))*5+(n(e.excilis??s.excilis??0))*10+(n(e.cryo??s.cryo??0))*5+(n(e.cryoAir??s.cryoAir??0))*10+(n(e.blade??s.blade??0))*5+(n(e.do_s??s.do_s??0))*10+(n(e.enaya??s.enaya??0))*10+n(e.salesA||0)*0.03;
+    sec03=(commit?280:0)+n(e.hygPC||1)*120+n(e.eqPC||1)*200+n(e.roomPC||1)*200;
+  }else if(e.job==='Secretary'){
+    const br=e.branch||'';
+    let bsSess={};
+    for(const bk of Object.keys(branchSessions)){if(br&&(bk.includes(br)||br.includes(bk))){bsSess=branchSessions[bk];break;}}
+    const svcs=br==='الهرم'?HARAM:DOKKI;
+    const bons=br==='الهرم'?[200,300,300,200,200]:null;
+    const H_KEYS={H1:'كشف_تغذية',H2:'متابعة_تغذية',H3:'تخسيس',H4:'كشف_ع_ط',H5:'جلسات_ع_ط'};
+    const D_KEYS={D1:'كشف_ع_ط',D2:'جلسات_ع_ط',D3:'حجامة',D4:'تيكار'};
+    svcs.forEach((s,i)=>{
+      const currKey=br==='الهرم'?`H${i+1}_curr`:`D${i+1}_curr`;
+      const achKey=br==='الهرم'?`H${i+1}_ach`:`D${i+1}_ach`;
+      const bssKey=br==='الهرم'?H_KEYS[`H${i+1}`]:D_KEYS[`D${i+1}`];
+      const curr=n(e[currKey]||0);
+      const ach=n(e[achKey]||(bsSess[bssKey]||0));
+      const bon=bons?bons[i]:s.b;
+      if(curr>0&&ach/curr>=0.9)sec02+=bon;
+    });
+    sec02+=n(e.salesS||0)*0.03;
+    const kpiEff=(n(e.kpiResp||1)*0.4+n(e.kpiTime||1)*0.4+n(e.kpiRes||1)*0.2)*300;
+    sec03=(commit?300:0)+kpiEff+n(e.kpiRev||0)*basic+n(e.assessCount||0)*30+n(e.videoCount||0)*50;
+  }else if(e.job==='Housekeeping'){
+    sec02=n(e.salesC||0)*0.03;sec03=(commit?500:0)+n(e.cleanSched||1)*1200;
+  }else if(e.job==='Nutrition doctor'){
+    sec02=n(e.nutrProfit||0)*n(e.nutrPct||0)+n(e.salesN||0)*0.03;sec03=0;
+  }
+  const grand=sec01+sec02+sec03+sec04;
+  const fc=fileComp[e.name]||{};
+  return{sec01:Math.round(sec01),sec02:Math.round(sec02),sec03:Math.round(sec03),sec04:Math.round(sec04),grand:Math.round(grand),shiftCost,hourCost,otDays,attDays,lateCount,otMin,delayMin,commit,nb,fileReq:fc.req||n(e.fileReq)||0,fileDone:fc.done||n(e.fileDone)||0,absentDays:att.absentDays||0};
+}
+
+function normEmp(raw){
+  const strip=k=>String(k).replace(/^[🟡⚡\s\uFE0F\u200D]+/u,'').trim();
+  const MAP={'الاسم':'name','الوظيفة':'job','الراتب الأساسي':'basic','الزيادة السنوية':'annual','الشفتات':'shifts','ساعات/شفت':'shiftHrs','الفرع':'branch','قرض':'loan','UT أيام':'utDays','بونص':'bonDays','جزاء':'penDays','ورشة':'workshop','ج.ع.ط':'physio','ريكفري':'recovery','حجامة':'hejama','تيكار':'tecar','شوك1':'shock1','شوك2':'shock2','برايفت':'private_s','إعادة تقييم':'reass','تقييم':'assess','Cavitation':'cavit','Radiofrequency':'rf','Excilis':'excilis','Cryo Air':'cryoAir','Cryo':'cryo','Cryoblade':'blade','DO':'do_s','العناية':'enaya','نظافة\nشخصية %':'hygPC','متابعة\nأجهزة %':'eqPC','نظافة\nغرف %':'roomPC','مبيعات\n(Asst)':'salesA','مبيعات\n(Secr)':'salesS','استجابة %':'kpiResp','موعد %':'kpiTime','نتائج %':'kpiRes','نمو إيرادات %':'kpiRev','ملفات\nمطلوبة':'fileReq','ملفات\nمنجزة':'fileDone','الربح الصافي':'nutrProfit','نسبة البونص%':'nutrPct','جدول تنظيف%':'cleanSched','عدد التقييمات':'assessCount','عدد الفيديوهات':'videoCount'};
+  const out={};
+  for(const[k,v]of Object.entries(raw)){
+    const sk=strip(k);out[sk]=v;out[k]=v;
+    for(const[ar,en]of Object.entries(MAP)){if(sk.includes(strip(ar))){out[en]=v;break;}}
+  }
+  // Secretary targets
+  for(const[k,v]of Object.entries(raw)){
+    const sk=strip(k);
+    ['كشف تغذية','متابعة تغذية','جلسات تخسيس','كشف ع.ط (هرم)','جلسات ع.ط (هرم)'].forEach((lbl,i)=>{
+      if(sk.includes(lbl)){if(sk.includes('تارجت الشهر'))out[`H${i+1}_curr`]=v;else if(sk.includes('المحقق'))out[`H${i+1}_ach`]=v;}
+    });
+    ['كشف ع.ط (دقي)','جلسات ع.ط (دقي)','حجامة+ريكفري','تيكار (دقي)'].forEach((lbl,i)=>{
+      if(sk.includes(lbl)){if(sk.includes('تارجت الشهر'))out[`D${i+1}_curr`]=v;else if(sk.includes('المحقق'))out[`D${i+1}_ach`]=v;}
+    });
+  }
+  return out;
+}
+
+// ── Main process ─────────────────────────────────────────────────
+async function runProcess(){
+  const btn=document.getElementById('runBtn');
+  btn.disabled=true;btn.innerHTML='<span class="spin"></span> جاري...';
+  document.getElementById('errBox').style.display='none';
+  try{
+    const empRows=await readXL(FILES.emp,'Data_Entry');
+    _rawRows=empRows.map(normEmp).filter(e=>{const nm=String(e.name||'').trim();return nm.length>1&&!/Section|بيانات|KPI|مستحق|إجمالي/i.test(nm);});
+    if(!_rawRows.length)throw new Error('لم يتم العثور على بيانات موظفين');
+    const empNames=_rawRows.map(r=>String(r.name||'').trim());
+    await buildAttMap(FILES.att,empNames);
+    if(FILES.apt)await buildAptSessions(FILES.apt,empNames);
+    if(FILES.ops&&FILES.enc)await buildFileComp(FILES.ops,FILES.enc,empNames);
+    if(FILES.doc){
+      docErrs={};
+      const drows=await readXL(FILES.doc);
+      for(const r of drows){
+        const nm=String(r['اسم الدكتور']||'').trim();
+        if(!nm)continue;
+        const m=matchName(nm,empNames);
+        if(!docErrs[m])docErrs[m]=[];
+        docErrs[m].push({date:String(r['التاريخ']||'').slice(0,10),patient:String(r['اسم المريض']||''),note:String(r['الملحوظة']||'')});
+      }
+    }
+    buildData();renderAll();
+    document.getElementById('emptyMsg').style.display='none';
+    document.getElementById('periodLbl').textContent=DATA.length+' موظف — تم التحليل';
+    document.getElementById('sbStats').style.display='block';
+    renderStats();
+  }catch(e){
+    const eb=document.getElementById('errBox');eb.textContent='⚠ '+e.message;eb.style.display='block';
+  }
+  btn.disabled=false;btn.innerHTML='إعادة التحليل';
+}
+
+function buildData(){
+  DATA=_rawRows.map((r,i)=>{
+    const calc=calcPayroll(r);
+    const att=attMap[r.name]||{};
+    const sess=aptSessions[r.name]||{};
+    return{
+      idx:i,name:String(r.name||''),job:String(r.job||'Physical therapist'),
+      basic:n(r.basic),annual:n(r.annual),nb:calc.nb,
+      shifts:n(r.shifts)||22,shiftHrs:n(r.shiftHrs)||7,branch:String(r.branch||'').replace('—','').trim(),
+      loan:n(r.loan),bonDays:n(r.bonDays),penDays:n(r.penDays),utDays:n(r.utDays),
+      workshop:String(r.workshop||'N').toUpperCase()==='Y',
+      sec01:calc.sec01,sec02:calc.sec02,sec03:calc.sec03,sec04:calc.sec04,grand:calc.grand,
+      attDays:calc.attDays,lateCount:calc.lateCount,otMin:calc.otMin,delayMin:calc.delayMin,
+      otDays:calc.otDays,shiftCost:calc.shiftCost,commit:calc.commit,
+      physio:n(r.physio??sess.physio??0),recovery:n(r.recovery??sess.recovery??0),
+      hejama:n(r.hejama??sess.hejama??0),tecar:n(r.tecar??sess.tecar??0),
+      shock1:n(r.shock1||0),shock2:n(r.shock2||0),private_s:n(r.private_s??sess.private_s??0),
+      reass:n(r.reass??sess.reass??0),assess:n(r.assess??sess.assess??0),
+      cavit:n(r.cavit??sess.cavit??0),rf:n(r.rf??sess.rf??0),excilis:n(r.excilis??sess.excilis??0),
+      cryo:n(r.cryo??sess.cryo??0),cryoAir:n(r.cryoAir??sess.cryoAir??0),
+      blade:n(r.blade??sess.blade??0),do_s:n(r.do_s??sess.do_s??0),enaya:n(r.enaya??sess.enaya??0),
+      hygPC:n(r.hygPC||1),eqPC:n(r.eqPC||1),roomPC:n(r.roomPC||1),
+      salesA:n(r.salesA||0),salesS:n(r.salesS||0),salesC:n(r.salesC||0),salesN:n(r.salesN||0),
+      kpiResp:n(r.kpiResp||1),kpiTime:n(r.kpiTime||1),kpiRes:n(r.kpiRes||1),kpiRev:n(r.kpiRev||0),
+      assessCount:n(r.assessCount||0),videoCount:n(r.videoCount||0),
+      cleanSched:n(r.cleanSched||1),nutrProfit:n(r.nutrProfit||0),nutrPct:n(r.nutrPct||0),
+      fileReq:calc.fileReq,fileDone:calc.fileDone,absentDays:calc.absentDays,
+      docErrors:docErrs[r.name]||[],
+    };
+  });
+}
+
+function renderAll(){renderKPIs();renderJobCards();renderOvCharts();populateFilters();renderEmp();renderAtt();}
+
+function renderKPIs(){
+  const tot=DATA.reduce((s,e)=>s+e.grand,0),avg=tot/DATA.length;
+  const mx=DATA.reduce((a,b)=>a.grand>b.grand?a:b,{grand:0,name:'—'});
+  const cs=[{l:'إجمالي الرواتب',v:fmt(tot),s:DATA.length+' موظف',c:'var(--acc)'},{l:'متوسط الراتب',v:fmt(avg),c:'#10B981'},{l:'أعلى راتب',v:fmt(mx.grand),s:mx.name,c:'#F59E0B'},{l:'الأقسام',v:[...new Set(DATA.map(e=>e.job))].length,s:'نشط',c:'#8B5CF6'}];
+  document.getElementById('kpiRow').innerHTML=cs.map(c=>`<div class="kpi" style="--c:${c.c}"><div class="kv">${c.v}</div><div class="kl">${c.l}</div>${c.s?`<div class="ks">${c.s}</div>`:''}</div>`).join('');
+}
+
+function renderJobCards(){
+  const tot=DATA.reduce((s,e)=>s+e.grand,0);
+  document.getElementById('jobCards').innerHTML=JO.map(j=>{
+    const m=JC[j],emps=DATA.filter(e=>e.job===j);if(!emps.length)return'';
+    const jt=emps.reduce((s,e)=>s+e.grand,0),p=tot?((jt/tot)*100).toFixed(1):0;
+    return`<div class="jcard" style="--c:${m.c}" onclick="filterJob('${j}')"><div class="jc-h"><div class="jc-dot"></div><div class="jc-name">${m.ic} ${m.l}</div><div class="jc-cnt">${emps.length} موظف</div></div><div class="jc-tot">${fmt(jt)}</div><div class="jc-avg">متوسط: ${fmt(jt/emps.length)}</div><div class="pb"><div class="pbf" style="width:${p}%"></div></div><div style="font-size:10px;color:var(--tx3);margin-top:3px;font-family:var(--mono)">${p}%</div></div>`;
+  }).join('');
+}
+
+function renderOvCharts(){
+  const el=document.getElementById('ovCharts');
+  el.innerHTML=`<div class="cc"><div class="ct">إجمالي / القسم</div><canvas id="ovB" height="180"></canvas></div><div class="cc"><div class="ct">توزيع</div><canvas id="ovP" height="180"></canvas></div>`;
+  setTimeout(()=>{
+    const bj=JO.map(j=>{const emps=DATA.filter(e=>e.job===j);return{j,t:emps.reduce((s,e)=>s+e.grand,0),m:JC[j]};}).filter(x=>DATA.some(e=>e.job===x.j));
+    if(charts.ovB)charts.ovB.destroy();if(charts.ovP)charts.ovP.destroy();
+    charts.ovB=new Chart(document.getElementById('ovB'),{type:'bar',data:{labels:bj.map(x=>x.m.l),datasets:[{data:bj.map(x=>Math.round(x.t)),backgroundColor:bj.map(x=>x.m.c),borderRadius:6,borderSkipped:false}]},options:{responsive:true,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>fmt(c.parsed.y)}}},scales:{y:{ticks:{color:'#4A5568',callback:v=>(v/1000).toFixed(0)+'k'},grid:{color:'rgba(42,51,71,.5)'}},x:{ticks:{color:'#4A5568'},grid:{display:false}}}}});
+    charts.ovP=new Chart(document.getElementById('ovP'),{type:'doughnut',data:{labels:bj.map(x=>x.m.l),datasets:[{data:bj.map(x=>Math.round(x.t)),backgroundColor:bj.map(x=>x.m.c),borderWidth:2,borderColor:'#161B25',hoverOffset:6}]},options:{responsive:true,plugins:{legend:{position:'bottom',labels:{color:'#8899AA',padding:8}},tooltip:{callbacks:{label:c=>`${c.label}: ${fmt(c.parsed)}`}}}}});
+  },50);
+}
+
+function populateFilters(){
+  const jf=document.getElementById('jf');jf.innerHTML='<option value="all">كل الأقسام</option>';
+  JO.forEach(j=>{if(DATA.some(e=>e.job===j)){const m=JC[j];jf.insertAdjacentHTML('beforeend',`<option value="${j}">${m.ic} ${m.l}</option>`);}});
+  const bf=document.getElementById('bf');bf.innerHTML='<option value="all">كل الفروع</option>';
+  [...new Set(DATA.map(e=>e.branch).filter(Boolean))].forEach(b=>bf.insertAdjacentHTML('beforeend',`<option value="${b}">${b}</option>`));
+}
+
+function renderEmp(){
+  const fj=document.getElementById('jf').value,fb=document.getElementById('bf').value;
+  let fd=DATA;if(fj!=='all')fd=fd.filter(e=>e.job===fj);if(fb!=='all')fd=fd.filter(e=>e.branch===fb);
+  const tb=document.getElementById('empTb');tb.innerHTML='';
+  fd.forEach((e,ri)=>{
+    const m=JC[e.job]||{c:'#666',l:e.job,ic:'👤'};const ao=e.attDays>=e.shifts,lo=e.lateCount<=2;
+    tb.insertAdjacentHTML('beforeend',`<tr class="${selEmp===e.idx?'sel':''}" onclick="openDet(${e.idx})">
+      <td style="color:var(--tx3);font-family:var(--mono)">${ri+1}</td>
+      <td class="td-name">${e.name}</td>
+      <td><span class="pill" style="background:${m.c}22;color:${m.c}">${m.ic} ${m.l}</span></td>
+      <td class="td-m">${fmt(e.basic)}</td>
+      <td class="td-m ${ao?'att-ok':'att-warn'}">${e.attDays}/${e.shifts}</td>
+      <td class="td-m ${lo?'att-ok':'att-warn'}">${e.lateCount}×</td>
+      <td class="td-m">${fmt(e.sec01)}</td>
+      <td class="td-m ed" onclick="startEd(event,${e.idx},'sec02',${e.sec02})">${fmt(e.sec02)}</td>
+      <td class="td-m ed" onclick="startEd(event,${e.idx},'sec03',${e.sec03})">${fmt(e.sec03)}</td>
+      <td class="td-m ${e.sec04<0?'td-neg':'td-pos'}">${fmt(e.sec04)}</td>
+      <td class="td-m td-acc">${fmt(e.grand)}</td>
+      <td><button class="del-btn" onclick="delEmp(event,${e.idx})">🗑</button></td>
+    </tr>`);
+  });
+  const sub=fd.reduce((s,e)=>s+e.grand,0);
+  document.getElementById('empFoot').innerHTML=`${fd.length} موظف — إجمالي: <span>${fmt(sub)}</span>`;
+}
+
+function renderAtt(){
+  const tb=document.getElementById('attTb');tb.innerHTML='';
+  DATA.forEach((e,i)=>{
+    const ao=e.attDays>=e.shifts,lo=e.lateCount<=2,m=JC[e.job]||{c:'#666',ic:'👤'};
+    const st=ao&&lo?'<span class="att-ok">✓ مستوفي</span>':`<span class="att-warn">${!ao?'⚠ غياب':''} ${!lo?'⏰ تأخير':''}</span>`;
+    tb.insertAdjacentHTML('beforeend',`<tr><td class="td-name">${e.name}</td><td><span class="pill" style="background:${m.c}22;color:${m.c}">${m.ic}</span></td><td class="td-m ${ao?'att-ok':'att-warn'}">${e.attDays}</td><td class="td-m">${e.shifts}</td><td class="td-m ${e.delayMin>300?'att-warn':e.delayMin>100?'att-mid':''}">${f1(e.delayMin)}</td><td class="td-m ${lo?'':'att-warn'}">${e.lateCount}</td><td class="td-m att-ok">${f1(e.otMin)}</td><td class="td-m ${e.absentDays>0?'att-warn':''}">${e.absentDays}</td><td>${st}</td></tr>`);
+  });
+}
+
+function renderStats(){
+  const tot=DATA.reduce((s,e)=>s+e.grand,0);
+  const late=DATA.filter(e=>e.lateCount>2).length,abs=DATA.filter(e=>e.attDays<e.shifts).length;
+  document.getElementById('statChips').innerHTML=[['إجمالي',fmt(tot)],['غياب',abs+' موظف'],['تأخير',late+' موظف']].map(([l,v])=>`<div class="sc"><span class="sc-l">${l}</span><span class="sc-v">${v}</span></div>`).join('');
+}
+
+function renderCharts(){
+  const bj=JO.map(j=>{const emps=DATA.filter(e=>e.job===j);const t=emps.reduce((s,e)=>s+e.grand,0);return{j,emps,t,avg:emps.length?t/emps.length:0,m:JC[j]};}).filter(x=>x.emps.length);
+  ['cBar','cPie','cAvg','cDel'].forEach(id=>{if(charts[id]){charts[id].destroy();delete charts[id];}});
+  const lb=bj.map(x=>x.m.l),co=bj.map(x=>x.m.c);
+  charts.cBar=new Chart(document.getElementById('cBar'),{type:'bar',data:{labels:lb,datasets:[{data:bj.map(x=>Math.round(x.t)),backgroundColor:co,borderRadius:6,borderSkipped:false}]},options:{responsive:true,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>fmt(c.parsed.y)}}},scales:{y:{ticks:{color:'#4A5568',callback:v=>(v/1000).toFixed(0)+'k'},grid:{color:'rgba(42,51,71,.4)'}},x:{ticks:{color:'#4A5568'},grid:{display:false}}}}});
+  charts.cPie=new Chart(document.getElementById('cPie'),{type:'doughnut',data:{labels:lb,datasets:[{data:bj.map(x=>Math.round(x.t)),backgroundColor:co,borderWidth:2,borderColor:'#161B25',hoverOffset:5}]},options:{responsive:true,plugins:{legend:{position:'bottom',labels:{color:'#8899AA',padding:8}},tooltip:{callbacks:{label:c=>`${c.label}: ${fmt(c.parsed)}`}}}}});
+  charts.cAvg=new Chart(document.getElementById('cAvg'),{type:'bar',data:{labels:lb,datasets:[{data:bj.map(x=>Math.round(x.avg)),backgroundColor:co,borderRadius:6,borderSkipped:false}]},options:{indexAxis:'y',responsive:true,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>fmt(c.parsed.x)}}},scales:{x:{ticks:{color:'#4A5568',callback:v=>(v/1000).toFixed(0)+'k'},grid:{color:'rgba(42,51,71,.4)'}},y:{ticks:{color:'#4A5568'},grid:{display:false}}}}});
+  const top=DATA.slice().sort((a,b)=>b.delayMin-a.delayMin).slice(0,15);
+  charts.cDel=new Chart(document.getElementById('cDel'),{type:'bar',data:{labels:top.map(e=>e.name.split(' ')[0]),datasets:[{data:top.map(e=>Math.round(e.delayMin)),backgroundColor:top.map(e=>e.delayMin>300?'#EF4444':e.delayMin>100?'#F59E0B':'#10B981'),borderRadius:5,borderSkipped:false}]},options:{responsive:true,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>c.parsed.y+' د'}}},scales:{y:{ticks:{color:'#4A5568'},grid:{color:'rgba(42,51,71,.4)'}},x:{ticks:{color:'#4A5568',maxRotation:40,font:{size:10}},grid:{display:false}}}}});
+}
+
+function startEd(ev,idx,field,cur){
+  ev.stopPropagation();const td=ev.currentTarget;
+  if(td.querySelector('input'))return;
+  td.innerHTML=`<input type="number" value="${n(cur)}" onblur="finEd(event,${idx},'${field}')" onkeydown="if(event.key==='Enter')this.blur();if(event.key==='Escape'){this.dataset.c=1;this.blur()}">`;
+  td.querySelector('input').select();
+}
+function finEd(ev,idx,field){
+  const inp=ev.target;if(inp.dataset.c){renderEmp();return;}
+  const val=parseFloat(inp.value);
+  if(!isNaN(val)){const e=DATA.find(x=>x.idx===idx);if(e){e[field]=Math.round(val);e.grand=e.sec01+e.sec02+e.sec03+e.sec04;}}
+  renderEmp();renderKPIs();renderStats();
+}
+
+function goto(name,btn){
+  document.querySelectorAll('.ni').forEach(x=>x.classList.remove('on'));if(btn)btn.classList.add('on');
+  document.querySelectorAll('.pg').forEach(p=>p.classList.remove('on'));
+  document.getElementById('pg-'+name).classList.add('on');
+  if(name==='charts'&&DATA.length)renderCharts();
+}
+function filterJob(j){document.getElementById('jf').value=j;goto('employees',document.querySelectorAll('.ni')[1]);renderEmp();}
+
+function openDet(idx){
+  selEmp=idx;renderEmp();
+  const e=DATA.find(x=>x.idx===idx);if(!e)return;
+  const m=JC[e.job]||{c:'#666',l:e.job,ic:'👤'};
+  const MR=(l,v,cls)=>`<div class="mr"><span class="mrl">${l}</span><span class="mrv ${cls||''}">${v}</span></div>`;
+  const MS=t=>`<div class="msec-t">${t}</div>`;
+  let s2='',s3='';
+  if(e.job==='Physical therapist'){
+    const sess=[['ج.ع.ط',e.physio,'physio'],['ريكفري',e.recovery,'recovery'],['حجامة',e.hejama,'hejama'],['تيكار',e.tecar,'tecar'],['شوك1',e.shock1,'shock1'],['شوك2',e.shock2,'shock2'],['تقييم',e.assess,'assess'],['إعادة تقييم',e.reass,'reass'],['برايفت',e.private_s,'private']];
+    s2=sess.filter(x=>x[1]>0).map(x=>MR(x[0]+' ('+x[1]+' جلسة)',fmt(x[0]==='ج.ع.ط'?(e.physio<=40?0:e.physio<=70?(e.physio-40)*20:600+(e.physio-70)*30):x[1]*(x[0]==='ريكفري'?50:x[0]==='حجامة'?40:x[0]==='تيكار'?50:x[0]==='شوك1'?20:x[0]==='شوك2'?30:x[0]==='تقييم'?30:x[0]==='إعادة تقييم'?20:400)),'pos')).join('');
+    s3=MR('الالتزام',fmt(e.commit?200:0),e.commit?'pos':'neg')+MR('ورشة',fmt(e.workshop?200:0),e.workshop?'pos':'');
+  }else if(e.job==='Assistant'){
+    const sess=[['Cavit',e.cavit,10],['RF',e.rf,5],['Excilis',e.excilis,10],['Cryo',e.cryo,5],['CryoAir',e.cryoAir,10],['Blade',e.blade,5],['DO',e.do_s,10],['Enaya',e.enaya,10]];
+    s2=sess.filter(x=>x[1]>0).map(x=>MR(x[0]+' ('+x[1]+')',fmt(x[1]*x[2]),'pos')).join('');
+    s3=MR('الالتزام',fmt(e.commit?280:0),e.commit?'pos':'neg')+MR('نظافة',fmt(e.hygPC*120),'pos')+MR('أجهزة',fmt(e.eqPC*200),'pos')+MR('غرف',fmt(e.roomPC*200),'pos');
+  }else if(e.job==='Secretary'){
+    s3=MR('الالتزام',fmt(e.commit?300:0),e.commit?'pos':'neg')+MR('KPI',(fmt((e.kpiResp*0.4+e.kpiTime*0.4+e.kpiRes*0.2)*300)),'pos');
+  }else if(e.job==='Housekeeping'){
+    s3=MR('الالتزام',fmt(e.commit?500:0),e.commit?'pos':'neg')+MR('تنظيف',fmt(e.cleanSched*1200),'pos');
+  }else if(e.job==='Nutrition doctor'){
+    s2=MR('ربح × نسبة',fmt(e.nutrProfit*e.nutrPct),'pos');
+  }
+  const compPct=e.fileReq>0?((e.fileDone/e.fileReq)*100).toFixed(0)+'%':'—';
+  let docHtml='';
+  if(e.docErrors&&e.docErrors.length>0){
+    docHtml=`<div class="msec"><div class="msec-t" style="color:#FCA5A5">❌ أخطاء الكومبليت (${e.docErrors.length})</div>${e.docErrors.map(d=>`<div class="mr"><span class="mrl">${d.date} — ${d.patient}</span><span class="mrv" style="font-size:10px;color:var(--tx3)">${d.note}</span></div>`).join('')}</div>`;
+  }
+  document.getElementById('detBox').innerHTML=`
+    <div class="mt"><div class="mt-dot" style="--c:${m.c}"></div><div><div class="mt-name">${e.name}</div><div class="mt-sub">${m.ic} ${m.l}${e.branch?' · '+e.branch:''}</div></div>
+    <button class="tbtn" onclick="openAddModal(${e.idx})" style="margin-right:auto;font-size:11px">✏ تعديل</button>
+    <button class="mc" onclick="closeMo('detMo')">✕</button></div>
+    <div class="mbody">
+      <div class="msec">${MS('📌 Sec01 — الراتب الثابت')}${MR('الراتب الأساسي',fmt(e.basic))}${MR('الزيادة',fmt(e.annual))}${MR('الراتب الجديد',fmt(e.nb),'big')}${MR('تكلفة الشفت',fmt(e.shiftCost))}${MR('Sec01',fmt(e.sec01),'big')}</div>
+      <div class="msec">${MS('🏥 Sec02 — الأداء')}${s2}${MR('Sec02 الإجمالي',fmt(e.sec02),'big')}</div>
+      <div class="msec">${MS('🎯 Sec03 — KPIs')}${MR('الحضور',e.attDays+'/'+e.shifts,e.attDays>=e.shifts?'pos':'neg')}${MR('التأخير',e.lateCount+'×',e.lateCount<=2?'pos':'neg')}${s3}${MR('Sec03 الإجمالي',fmt(e.sec03),'big')}</div>
+      <div class="msec">${MS('⚖️ Sec04')}${MR('OT ('+e.otDays+' يوم)',fmt(e.otDays*e.shiftCost),'pos')}${MR('بونص ('+e.bonDays+')',fmt(e.bonDays*e.shiftCost),'pos')}${MR('UT ('+e.utDays+')',fmt(-e.utDays*e.shiftCost),'neg')}${MR('جزاء ('+e.penDays+')',fmt(-e.penDays*e.shiftCost),'neg')}${MR('قرض',fmt(-e.loan),'neg')}${MR('Sec04',fmt(e.sec04),e.sec04>=0?'pos':'neg')}</div>
+      <div class="msec">${MS('📁 الملفات')}${MR('المطلوب/المنجز',e.fileReq+'/'+e.fileDone)}${MR('نسبة',compPct)}</div>
+      ${docHtml}
+      <div class="mgrand"><span class="mgl">💰 الإجمالي المستحق</span><span class="mgv">${fmt(e.grand)}</span></div>
+    </div>`;
+  document.getElementById('detMo').classList.add('show');
+}
+
+function openAddModal(idx){
+  editIdx=(idx!==undefined)?idx:null;
+  const e=editIdx!==null?DATA.find(x=>x.idx===editIdx):{};
+  document.getElementById('addMoTitle').textContent=editIdx!==null?'تعديل موظف':'إضافة موظف جديد';
+  const job=e.job||'Physical therapist';
+  const frow=(l,n,v,type='number',extra='')=>`<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;align-items:center"><label style="font-size:11px;color:var(--tx3)">${l}</label><input type="${type}" name="${n}" value="${v||''}" ${extra} style="background:var(--sf2);border:1px solid var(--bd);border-radius:6px;color:var(--tx);font-family:var(--mono);font-size:12px;padding:6px 9px;outline:none;width:100%"></div>`;
+  const fsel=(l,n,v,opts)=>`<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;align-items:center"><label style="font-size:11px;color:var(--tx3)">${l}</label><select name="${n}" style="background:var(--sf2);border:1px solid var(--bd);border-radius:6px;color:var(--tx);font-family:var(--font);font-size:12px;padding:6px 9px;outline:none;width:100%">${opts.map(o=>`<option value="${o.v}" ${v===o.v?'selected':''}>${o.l}</option>`).join('')}</select></div>`;
+  document.getElementById('addForm').innerHTML=
+    fsel('الوظيفة','job',job,JO.map(j=>({v:j,l:JC[j].ic+' '+JC[j].l})))+
+    frow('الاسم','name',e.name||'','text','placeholder="الاسم الكامل"')+
+    fsel('الفرع (سكرتارية)','branch',e.branch||'',[{v:'',l:'—'},{v:'الهرم',l:'الهرم'},{v:'الدقي',l:'الدقي'}])+
+    frow('الراتب الأساسي','basic',e.basic||0)+
+    frow('الزيادة','annual',e.annual||0)+
+    frow('الشفتات','shifts',e.shifts||22)+
+    frow('ساعات/شفت','shiftHrs',e.shiftHrs||7)+
+    frow('بونص (أيام)','bonDays',e.bonDays||0,'number','step=0.5')+
+    frow('جزاء (أيام)','penDays',e.penDays||0,'number','step=0.5')+
+    frow('UT (أيام)','utDays',e.utDays||0,'number','step=0.5')+
+    frow('قرض','loan',e.loan||0);
+}
+
+function collectForm(){
+  const out={};
+  document.getElementById('addForm').querySelectorAll('input,select').forEach(inp=>{
+    if(inp.name)out[inp.name]=inp.type==='number'?n(inp.value):inp.value;
+  });
+  return out;
+}
+
+function saveEmployee(){
+  const d=collectForm();
+  if(!String(d.name||'').trim()){alert('الاسم مطلوب');return;}
+  const calc=calcPayroll({...d,attDays:attMap[d.name]?.days||0,lateCount:attMap[d.name]?.lateCount||0});
+  const newIdx=editIdx!==null?editIdx:DATA.length;
+  const row={idx:newIdx,...d,nb:calc.nb,basic:n(d.basic),annual:n(d.annual),shifts:n(d.shifts)||22,shiftHrs:n(d.shiftHrs)||7,loan:n(d.loan),bonDays:n(d.bonDays),penDays:n(d.penDays),utDays:n(d.utDays),sec01:calc.sec01,sec02:calc.sec02,sec03:calc.sec03,sec04:calc.sec04,grand:calc.grand,attDays:calc.attDays,lateCount:calc.lateCount,otMin:calc.otMin,delayMin:calc.delayMin,otDays:calc.otDays,shiftCost:calc.shiftCost,commit:calc.commit,fileReq:0,fileDone:0,docErrors:[],physio:0,recovery:0,hejama:0,tecar:0,shock1:0,shock2:0,private_s:0,reass:0,assess:0,cavit:0,rf:0,excilis:0,cryo:0,cryoAir:0,blade:0,do_s:0,enaya:0,hygPC:1,eqPC:1,roomPC:1,salesA:0,salesS:0,salesC:0,salesN:0,kpiResp:1,kpiTime:1,kpiRes:1,kpiRev:0,assessCount:0,videoCount:0,cleanSched:1,nutrProfit:0,nutrPct:0,absentDays:0};
+  if(editIdx!==null){const i=DATA.findIndex(x=>x.idx===editIdx);if(i>=0){DATA[i]=row;_rawRows[editIdx]=d;}}
+  else{DATA.push(row);_rawRows.push(d);}
+  closeMo('addMo');renderAll();renderStats();
+  document.getElementById('periodLbl').textContent=DATA.length+' موظف';
+}
+
+function delEmp(ev,idx){ev.stopPropagation();if(!confirm('حذف هذا الموظف؟'))return;DATA=DATA.filter(e=>e.idx!==idx);_rawRows=_rawRows.filter((_,i)=>i!==idx);renderAll();renderStats();}
+function closeMo(id,ev){if(!ev||ev.target===document.getElementById(id)){document.getElementById(id).classList.remove('show');if(id==='detMo'){selEmp=null;renderEmp();}}}
+
+function gf(){const fj=document.getElementById('jf')?document.getElementById('jf').value:'all';const fb=document.getElementById('bf')?document.getElementById('bf').value:'all';let d=DATA;if(fj!=='all')d=d.filter(e=>e.job===fj);if(fb!=='all')d=d.filter(e=>e.branch===fb);return d;}
+function exportExcel(){buildXL(DATA);}
+function exportFiltered(){buildXL(gf());}
+function buildXL(d){
+  const wb=XLSX.utils.book_new();
+  const ws1=XLSX.utils.aoa_to_sheet([['الاسم','الوظيفة','الفرع','الراتب الأساسي','الزيادة','الراتب الجديد','الشفتات','الحضور','تأخير (د)','مرات تأخير','OT (د)','غياب','Sec01','Sec02','Sec03','Sec04','الإجمالي'],...d.map(e=>[e.name,e.job,e.branch,e.basic,e.annual,e.nb,e.shifts,e.attDays,Math.round(e.delayMin),e.lateCount,Math.round(e.otMin),e.absentDays,e.sec01,e.sec02,e.sec03,e.sec04,e.grand])]);
+  ws1['!cols']=[{wch:26},...Array(16).fill({wch:13})];
+  const tot=d.reduce((s,e)=>s+e.grand,0);
+  const ws2=XLSX.utils.aoa_to_sheet([['القسم','موظفين','إجمالي','متوسط'],...JO.filter(j=>d.some(e=>e.job===j)).map(j=>{const em=d.filter(e=>e.job===j),t=em.reduce((s,e)=>s+e.grand,0);return[JC[j].l,em.length,t,Math.round(t/em.length)];}),['الكلي',d.length,tot,'']]);
+  const ws3=XLSX.utils.aoa_to_sheet([['الاسم','الوظيفة','حضر','مطلوب','تأخير د','مرات','OT د','غياب','الحالة'],...d.map(e=>[e.name,e.job,e.attDays,e.shifts,Math.round(e.delayMin),e.lateCount,Math.round(e.otMin),e.absentDays,e.attDays>=e.shifts&&e.lateCount<=2?'مستوفي':'غير مستوفي'])]);
+  XLSX.utils.book_append_sheet(wb,ws1,'الرواتب');XLSX.utils.book_append_sheet(wb,ws2,'ملخص');XLSX.utils.book_append_sheet(wb,ws3,'الحضور');
+  XLSX.writeFile(wb,'BodyFix_Payroll.xlsx');
+}
+function exportCSV(){
+  const d=DATA,csv=[['الاسم','الوظيفة','الفرع','أساسي','زيادة','جديد','شفتات','حضور','تأخير','مرات','OT','غياب','Sec01','Sec02','Sec03','Sec04','الإجمالي'],...d.map(e=>[e.name,e.job,e.branch,e.basic,e.annual,e.nb,e.shifts,e.attDays,Math.round(e.delayMin),e.lateCount,Math.round(e.otMin),e.absentDays,e.sec01,e.sec02,e.sec03,e.sec04,e.grand])].map(r=>r.map(v=>`"${v}"`).join(',')).join('\n');
+  const b=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});const u=URL.createObjectURL(b);const a=document.createElement('a');a.href=u;a.download='BodyFix.csv';a.click();setTimeout(()=>URL.revokeObjectURL(u),1000);
+}
+</script>
+</body>
+</html>
